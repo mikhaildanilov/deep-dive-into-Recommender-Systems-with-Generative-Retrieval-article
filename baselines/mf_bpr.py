@@ -191,7 +191,7 @@ def main() -> None:
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    run(split=args.split, dim=args.dim, epochs=args.epochs, lr=args.lr, ks=args.ks)
+    run(split=args.split, dim=args.dim, epochs=args.epochs, lr=args.lr, ks=args.ks, seed=args.seed)
 
 
 if __name__ == "__main__":
