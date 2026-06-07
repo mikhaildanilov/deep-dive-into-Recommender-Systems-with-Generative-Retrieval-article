@@ -623,6 +623,12 @@ def main() -> None:
         default=DEFAULT_TEMPERATURE,
         help="Softmax temperature for sampling (>1 flatter, <1 sharper).",
     )
+    parser.add_argument(
+        "--seed",
+        type=float,
+        default=42,
+        help="Seed.",
+    )
     args = parser.parse_args()
     run(
         split=args.split,
@@ -635,6 +641,7 @@ def main() -> None:
         gen_mode=args.gen_mode,
         num_samples=args.num_samples,
         temperature=args.temperature,
+        seed=args.seed,
     )
 
 
