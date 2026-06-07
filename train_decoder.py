@@ -63,6 +63,8 @@ def train(
     should_add_sep_token=True,
     num_user_bins=None,
     top_k_eval_list=[1, 5, 10],
+    eval_gen_mode="beam",
+    eval_num_samples=1000,
 ):
     if dataset != RecDataset.AMAZON:
         raise Exception(f"Dataset currently not supported: {dataset}.")
@@ -231,7 +233,12 @@ def train(
 
                         with torch.no_grad():
                             generated = model.generate_next_sem_id(
-                                tokenized_data, top_k=True, temperature=1
+                                tokenized_data,
+                                top_k=True,
+                                temperature=1,
+                                gen_mode=eval_gen_mode,
+                                num_samples=eval_num_samples,
+                                num_return=max(top_k_eval_list),
                             )
 
                         actual = tokenized_data.sem_ids_fut[:, :vae_n_layers]

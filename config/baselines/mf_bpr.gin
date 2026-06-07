@@ -1,0 +1,13 @@
+# MF-BPR -- matrix factorization with Bayesian Personalized Ranking loss.
+
+run_baseline.model = "mf_bpr"
+run_baseline.split = "beauty"
+run_baseline.ks = [5, 10, 50, 100]
+run_baseline.seed = 42
+run_baseline.device = "cpu"
+
+run_baseline.dim = 64
+run_baseline.epochs = 50          # passes over all (user, positive) pairs
+run_baseline.lr = 0.01
+run_baseline.batch_size = 2048
+run_baseline.mf_weight_decay = 1e-5

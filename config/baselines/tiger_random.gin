@@ -1,0 +1,36 @@
+# TIGER with Random IDs -- TIGER's encoder-decoder trained on randomly assigned
+# integer codes instead of RQ-VAE Semantic IDs. Ablates content-based
+# quantization: no item content is used to build the IDs.
+
+run_baseline.model = "tiger_random"
+run_baseline.split = "beauty"
+run_baseline.ks = [1]#[5, 10, 50, 100]
+run_baseline.seed = 42
+run_baseline.device = "cpu"
+
+# Decoding for long recommendation lists.
+# gen_mode="sample": stochastic autoregressive sampling -> large candidate pool
+#   (supports k = 50, 100, ...). gen_mode="beam": exact, but only for small k.
+# num_samples=None auto-scales the pool to comfortably cover max(ks).
+# temperature > 1 flattens the distribution (more diverse candidates).
+run_baseline.gen_mode = "sample"
+run_baseline.num_samples = None
+run_baseline.temperature = 1.0
+
+# Semantic-ID structure.
+run_baseline.n_layers = 1 #3
+run_baseline.codebook_size = 256
+
+# Optimisation (epochs == number of optimisation steps / batches).
+run_baseline.max_len = 20
+run_baseline.epochs = 1 #20000
+run_baseline.lr = 0.001
+run_baseline.batch_size = 256
+run_baseline.weight_decay = 0.01
+run_baseline.warmup_steps = 10000
+
+# T5 encoder-decoder size (matches configs/decoder_amazon.gin scale).
+run_baseline.t5_d_model = 128
+run_baseline.t5_num_heads = 6
+run_baseline.t5_d_ff = 1024
+run_baseline.t5_num_layers = 1 #4

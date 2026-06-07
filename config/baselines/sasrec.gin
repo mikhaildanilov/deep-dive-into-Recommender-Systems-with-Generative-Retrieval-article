@@ -1,0 +1,16 @@
+# SASRec -- unidirectional (causal) self-attentive sequential recommender.
+
+run_baseline.model = "sasrec"
+run_baseline.split = "beauty"
+run_baseline.ks = [5, 10, 50, 100]
+run_baseline.seed = 42
+run_baseline.device = "cpu"
+
+run_baseline.dim = 64
+run_baseline.num_layers = 2
+run_baseline.num_heads = 2
+run_baseline.max_len = 50
+run_baseline.dropout = 0.2
+run_baseline.epochs = 20 #100         # passes over all training sequences
+run_baseline.lr = 0.001
+run_baseline.batch_size = 128
