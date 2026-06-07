@@ -172,10 +172,10 @@ def train_mf_bpr(
     return model
 
 
-def run(split: str, dim: int, epochs: int, lr: float, ks: List[int]) -> None:
+def run(split: str, dim: int, epochs: int, lr: float, ks: List[int], seed: int) -> None:
     data = AmazonSequenceData(split=split)
-    print(f"[MF-BPR] split={split} users={len(data)} items={data.num_items}")
-    model = train_mf_bpr(data, dim=dim, epochs=epochs, lr=lr, ks=ks)
+    print(f"[MF-BPR] split={split} users={len(data)} items={data.num_items} seed={seed}")
+    model = train_mf_bpr(data, dim=dim, epochs=epochs, lr=lr, ks=ks, seed=seed)
     val_metrics = evaluate(data, model, "val", ks, "cpu")
     test_metrics = evaluate(data, model, "test", ks, "cpu")
     print(f"[MF-BPR] VAL : {format_metrics(val_metrics)}")
@@ -189,6 +189,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--lr", type=float, default=DEFAULT_LR)
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     run(split=args.split, dim=args.dim, epochs=args.epochs, lr=args.lr, ks=args.ks)
 
