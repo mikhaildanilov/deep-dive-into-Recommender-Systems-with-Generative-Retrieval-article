@@ -176,17 +176,16 @@ def run(
     epochs: int,
     max_len: int,
     ks: List[int],
+    device: str = "cpu",
+    seed: int = 42,
 ) -> None:
     data = AmazonSequenceData(split=split)
-    print(f"[SASRec] split={split} users={len(data)} items={data.num_items}")
-    model = train_sasrec(data, dim=dim, epochs=epochs, max_len=max_len, ks=ks)
+    print(f"[SASRec] split={split} users={len(data)} items={data.num_items} seed={seed}")
+    model = train_sasrec(data, dim=dim, epochs=epochs, max_len=max_len,
+                         ks=ks, device=device, seed=seed)
     model.eval()
-    val_metrics = evaluate_next_item(
-        data, model.score_at_last, "val", max_len, ks, "cpu"
-    )
-    test_metrics = evaluate_next_item(
-        data, model.score_at_last, "test", max_len, ks, "cpu"
-    )
+    val_metrics = evaluate_next_item(data, model.score_at_last, "val", max_len, ks, device)
+    test_metrics = evaluate_next_item(data, model.score_at_last, "test", max_len, ks, device)
     print(f"[SASRec] VAL : {format_metrics(val_metrics)}")
     print(f"[SASRec] TEST: {format_metrics(test_metrics)}")
 
@@ -198,6 +197,8 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--max-len", type=int, default=DEFAULT_MAX_LEN)
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
+    parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     run(
         split=args.split,
@@ -205,6 +206,8 @@ def main() -> None:
         epochs=args.epochs,
         max_len=args.max_len,
         ks=args.ks,
+        device=args.device,
+        seed=args.seed,
     )
 
 
