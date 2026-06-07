@@ -241,12 +241,14 @@ def run(
     epochs: int,
     max_len: int,
     ks: List[int],
+    device: str = "cpu",
+    seed: int = 42,
 ) -> None:
     data = AmazonSequenceData(split=split)
-    print(f"[BERT4Rec] split={split} users={len(data)} items={data.num_items}")
-    model = train_bert4rec(data, dim=dim, epochs=epochs, max_len=max_len, ks=ks)
-    val_metrics = evaluate(data, model, "val", max_len, ks, "cpu")
-    test_metrics = evaluate(data, model, "test", max_len, ks, "cpu")
+    print(f"[BERT4Rec] split={split} users={len(data)} items={data.num_items} seed={seed}")
+    model = train_bert4rec(data, dim=dim, epochs=epochs, max_len=max_len, ks=ks, device=device, seed=seed)
+    val_metrics = evaluate(data, model, "val", max_len, ks, device)
+    test_metrics = evaluate(data, model, "test", max_len, ks, device)
     print(f"[BERT4Rec] VAL : {format_metrics(val_metrics)}")
     print(f"[BERT4Rec] TEST: {format_metrics(test_metrics)}")
 
@@ -258,6 +260,8 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--max-len", type=int, default=DEFAULT_MAX_LEN)
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
+    parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     run(
         split=args.split,
@@ -265,6 +269,8 @@ def main() -> None:
         epochs=args.epochs,
         max_len=args.max_len,
         ks=args.ks,
+        device=args.device,
+        seed=args.seed,
     )
 
 
