@@ -9,7 +9,7 @@ run_baseline.model = "tiger_lsh"
 run_baseline.split = "beauty"
 run_baseline.ks = [5, 10, 50, 100]
 run_baseline.seed = 42
-run_baseline.device = "cpu"
+run_baseline.device = "gpu"
 
 # Decoding for long recommendation lists.
 # gen_mode="sample": stochastic autoregressive sampling -> large candidate pool
@@ -26,7 +26,7 @@ run_baseline.codebook_size = 256
 
 # Optimisation (epochs == number of optimisation steps / batches).
 run_baseline.max_len = 20
-run_baseline.epochs = 10 #20000
+run_baseline.epochs = 20000
 run_baseline.lr = 0.001
 run_baseline.batch_size = 256
 run_baseline.weight_decay = 0.01
