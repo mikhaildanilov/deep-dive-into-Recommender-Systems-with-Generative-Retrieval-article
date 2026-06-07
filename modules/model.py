@@ -11,6 +11,14 @@ from transformers.cache_utils import DynamicCache, EncoderDecoderCache
 
 torch.set_float32_matmul_precision("high")
 
+# Decoding strategies for generate_next_sem_id.
+GEN_MODE_BEAM = "beam"
+GEN_MODE_SAMPLE = "sample"
+# Cap on (inputs x samples) rows pushed through the decoder at once, to bound
+# peak memory when sampling many candidates per input.
+SAMPLE_MAX_ROWS = 4096
+LOG_EPS = 1e-12
+
 
 class ModelOutput(NamedTuple):
     loss: Tensor
@@ -391,17 +399,152 @@ class EncoderDecoderRetrievalModel(nn.Module):
         return generated, log_probas
 
     @torch.no_grad()
+    def generate_sampled(
+        self,
+        attention_mask,
+        input_ids,
+        user_id=None,
+        num_samples: int = 256,
+        num_return: Optional[int] = None,
+        temperature: float = 1.0,
+        generator: Optional[torch.Generator] = None,
+    ):
+        """Generate a large candidate pool via stochastic autoregressive sampling.
+
+        Unlike :meth:`generate` (exact sampling-based beam search, only practical
+        for small top-k), this draws ``num_samples`` full semantic-ID tuples per
+        input -- one token per hierarchy from the (temperature-scaled) softmax,
+        with no validity masking or pruning -- then deduplicates them and keeps
+        the ``num_return`` highest-probability unique tuples. This yields a large
+        but *approximate* candidate set, which is what makes long recommendation
+        lists (k = 50, 100, ...) tractable for the generative model.
+
+        Returns:
+            generated_ids: [B, num_return, num_hierarchies] unique tuples,
+                           best-first, padded with -1 when fewer uniques exist.
+            log_probas:    [B, num_return] cumulative log-probabilities (-inf for
+                           padding slots).
+        """
+        if num_return is None:
+            num_return = num_samples
+        n_layers = self.num_hierarchies
+
+        enc_out, enc_mask = self.encoder_forward_pass(
+            attention_mask=attention_mask, input_ids=input_ids, user_id=user_id
+        )
+        num_inputs = enc_out.size(0)
+        # Bound peak memory: process at most SAMPLE_MAX_ROWS (input x sample) rows.
+        inputs_per_chunk = max(1, SAMPLE_MAX_ROWS // num_samples)
+
+        code_chunks, logp_chunks = [], []
+        for chunk_start in range(0, num_inputs, inputs_per_chunk):
+            chunk_end = min(num_inputs, chunk_start + inputs_per_chunk)
+            rep_enc = enc_out[chunk_start:chunk_end].repeat_interleave(
+                num_samples, dim=0
+            )
+            rep_mask = enc_mask[chunk_start:chunk_end].repeat_interleave(
+                num_samples, dim=0
+            )
+
+            generated = None  # [rows, h], grows by one hierarchy each step
+            log_probs = torch.zeros(rep_enc.size(0), device=rep_enc.device)
+            for h in range(n_layers):
+                # No KV cache: re-run the (short) decoder prefix each hierarchy.
+                dec_out = self.decoder_forward_pass(
+                    future_ids=generated,
+                    encoder_output=rep_enc,
+                    attention_mask_for_encoder=rep_mask,
+                    use_cache=False,
+                )
+                logits = self.decoder_mlp[h](dec_out[:, -1, :]) / temperature
+                probs = F.softmax(logits, dim=-1)
+                nxt = torch.multinomial(probs, num_samples=1, generator=generator)
+                token_logp = torch.log(
+                    torch.gather(probs, 1, nxt).squeeze(1) + LOG_EPS
+                )
+                log_probs = log_probs + token_logp
+                generated = (
+                    nxt if generated is None else torch.cat([generated, nxt], dim=1)
+                )
+
+            rows = chunk_end - chunk_start
+            code_chunks.append(generated.view(rows, num_samples, n_layers))
+            logp_chunks.append(log_probs.view(rows, num_samples))
+
+        codes = torch.cat(code_chunks, dim=0)  # [B, num_samples, n_layers]
+        log_probas = torch.cat(logp_chunks, dim=0)  # [B, num_samples]
+        return self._dedup_top_candidates(codes, log_probas, num_return)
+
+    def _dedup_top_candidates(
+        self, codes: Tensor, log_probas: Tensor, num_return: int
+    ) -> GenerationOutput:
+        """Deduplicate sampled tuples per row and keep the best ``num_return``.
+
+        Duplicate samples of the same tuple are collapsed, keeping their highest
+        log-probability. Rows are sorted best-first and padded to ``num_return``
+        with -1 codes / -inf log-probabilities when fewer unique tuples exist.
+        """
+        B, _, n_layers = codes.shape
+        device = codes.device
+        out_codes = torch.full(
+            (B, num_return, n_layers), -1, dtype=codes.dtype, device=device
+        )
+        out_logp = torch.full(
+            (B, num_return), float("-inf"), dtype=log_probas.dtype, device=device
+        )
+
+        codes_list = codes.tolist()
+        logp_list = log_probas.tolist()
+        for b in range(B):
+            best: dict = {}
+            for code, lp in zip(codes_list[b], logp_list[b]):
+                key = tuple(code)
+                if key not in best or lp > best[key]:
+                    best[key] = lp
+            ranked = sorted(best.items(), key=lambda kv: kv[1], reverse=True)
+            for slot, (key, lp) in enumerate(ranked[:num_return]):
+                out_codes[b, slot] = torch.tensor(key, device=device)
+                out_logp[b, slot] = lp
+        return GenerationOutput(sem_ids=out_codes, log_probas=out_logp)
+
+    @torch.no_grad()
     def generate_next_sem_id(
         self,
         batch: TokenizedSeqBatch,
         top_k: bool = True,
-        temperature: int = 1,
+        temperature: float = 1,
+        gen_mode: str = GEN_MODE_BEAM,
+        num_samples: int = 256,
+        num_return: Optional[int] = None,
+        generator: Optional[torch.Generator] = None,
     ) -> GenerationOutput:
+        """Generate next-item semantic IDs.
+
+        ``gen_mode='beam'`` uses the exact sampling-based beam search
+        (:meth:`generate`), best for small top-k. ``gen_mode='sample'`` uses
+        :meth:`generate_sampled` to produce a large approximate candidate pool,
+        enabling long recommendation lists (k = 50, 100, ...).
+        """
         sem_ids_dim = self.num_hierarchies + 1
         input_ids = _strip_dedup_col(batch.sem_ids, sem_ids_dim, self.num_hierarchies)
         attention_mask = _strip_dedup_col(
             batch.seq_mask.long(), sem_ids_dim, self.num_hierarchies
         )
+        if gen_mode == GEN_MODE_SAMPLE:
+            return self.generate_sampled(
+                attention_mask=attention_mask,
+                input_ids=input_ids,
+                user_id=batch.user_ids,
+                num_samples=num_samples,
+                num_return=num_return,
+                temperature=temperature,
+                generator=generator,
+            )
+        if gen_mode != GEN_MODE_BEAM:
+            raise ValueError(
+                f"Unknown gen_mode {gen_mode!r}; use "
+                f"{GEN_MODE_BEAM!r} or {GEN_MODE_SAMPLE!r}."
+            )
         generated_ids, log_probas = self.generate(
             attention_mask=attention_mask,
             input_ids=input_ids,

@@ -17,6 +17,11 @@ train.force_dataset_process=False
 train.full_eval_every=5000
 train.partial_eval_every=5000
 train.dataset_split="beauty"
+# Evaluation cutoffs (recall@k / ndcg@k / h@k are reported for each k).
+train.top_k_eval_list=[1, 5, 10, 50, 100]
+# Decoding at eval: "beam" (exact, small k) or "sample" (large k = 50, 100).
+train.eval_gen_mode="sample"
+train.eval_num_samples=1000
 #train.attn_dropout=0.1
 #train.attn_heads=6
 #train.attn_embed_dim=384

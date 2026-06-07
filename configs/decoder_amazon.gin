@@ -28,5 +28,13 @@ train.t5_num_layers=4
 train.top_k_for_generation=10
 train.should_add_sep_token=True
 
+# Evaluation cutoffs (recall@k / ndcg@k / h@k are reported for each k).
+train.top_k_eval_list=[1, 5, 10, 50, 100]
+# Decoding for long recommendation lists at eval time:
+#   "beam"   -- exact sampling-based beam search (use only for small k);
+#   "sample" -- stochastic sampling of a large candidate pool (supports k=50,100).
+train.eval_gen_mode="sample"
+train.eval_num_samples=1000
+
 # T5 text-encoder size: base | large | xl | xxl
 build_text_encoder.model_size="base"
