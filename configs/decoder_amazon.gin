@@ -4,7 +4,7 @@ import data.preprocessing
 train.iterations=10000
 train.learning_rate=0.001
 train.weight_decay=0.0001
-train.batch_size=1 #was 640
+train.batch_size=640
 train.vae_input_dim=768
 train.vae_hidden_dims=[512, 256, 128]
 train.vae_embed_dim=32
