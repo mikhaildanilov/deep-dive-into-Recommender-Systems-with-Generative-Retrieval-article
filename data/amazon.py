@@ -25,6 +25,9 @@ def parse(path):
         yield eval(l)
 
 
+# EVAL_STRATEGIES = ("leave-one-out", "temporal-split")
+
+
 class AmazonReviews(InMemoryDataset, PreprocessingMixin):
     gdrive_id = "1qGxgmx7G_WB7JE4Cn_bEcZ_o_NAJLE3G"
     gdrive_filename = "P5_data.zip"

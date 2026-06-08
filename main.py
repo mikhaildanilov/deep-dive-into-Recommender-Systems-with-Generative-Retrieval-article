@@ -2,7 +2,7 @@ from pathlib import Path
 import argparse
 import yaml
 
-import baselines.ease
+import baselines.ease.train
 
 
 def dummy_call(_):
@@ -11,7 +11,7 @@ def dummy_call(_):
 
 MODEL_TO_RUN_ENTRYPOINT = {
     "EXAMPLE": lambda _: print("Hello, world!"),
-    "EASE": baselines.ease.run_from_config,
+    "EASE": baselines.ease.train.run_from_config,
     "MF-BPR": dummy_call,
     "SASRec": dummy_call,
     "BERT4Rec": dummy_call,
