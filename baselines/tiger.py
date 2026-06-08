@@ -109,7 +109,9 @@ class PrecomputedIdTokenizer:
             self.cached_ids[ids.flatten(), :], "(b n) d -> b (n d)", n=ids.shape[1]
         )
 
-    def tokenize(self, item_ids: Tensor, seq_mask: Tensor, target_ids: Tensor, user_ids: Tensor):
+    def tokenize(
+        self, item_ids: Tensor, seq_mask: Tensor, target_ids: Tensor, user_ids: Tensor
+    ):
         """Build a ``TokenizedSeqBatch`` from padded id sequences.
 
         Args:
@@ -337,7 +339,9 @@ def evaluate_tiger(
     covered: Dict[int, set] = {k: set() for k in ks}
     all_codes = tokenizer.cached_ids[:, :n_layers].to(device)
     all_code_ids = _encode_code_id(all_codes, codebook_size)  # [num_items]
-    code_to_item = {int(cid): iid for iid, cid in enumerate(all_code_ids.cpu().tolist())}
+    code_to_item = {
+        int(cid): iid for iid, cid in enumerate(all_code_ids.cpu().tolist())
+    }
     num_items = len(code_to_item)
 
     sem_ids_dim = n_layers + 1
@@ -350,7 +354,7 @@ def evaluate_tiger(
         else None
     )
 
-    for start in trange(0, len(examples), EVAL_BATCH_SIZE, desc='Evaluate'):
+    for start in trange(0, len(examples), EVAL_BATCH_SIZE, desc="Evaluate"):
         batch = examples[start : start + EVAL_BATCH_SIZE]
         item_ids, seq_mask = _pad_batch(
             [ex.history for ex in batch], max_len, data.num_items, device
@@ -367,9 +371,7 @@ def evaluate_tiger(
                     f"{BEAM_MAX_K}); got max(ks)={max(ks)}. Use gen_mode='sample' "
                     f"for large recommendation lists."
                 )
-            generated = model.generate_next_sem_id(
-                tokenized, top_k=True, temperature=1
-            )
+            generated = model.generate_next_sem_id(tokenized, top_k=True, temperature=1)
             ranks = _ranks_from_beam(generated.sem_ids, target_codes)
         elif gen_mode == GEN_MODE_SAMPLE:
             input_ids = _strip_dedup_col(tokenized.sem_ids, sem_ids_dim, n_layers)
@@ -391,7 +393,9 @@ def evaluate_tiger(
             ranks = _ranks_from_samples(sample_code_ids, log_probs, target_code_ids)
 
             # Coverage tracking: top-K unique codes per user by log_prob
-            for user_codes, user_lps in zip(sample_code_ids.tolist(), log_probs.tolist()):
+            for user_codes, user_lps in zip(
+                sample_code_ids.tolist(), log_probs.tolist()
+            ):
                 best: dict = {}
                 for code, lp in zip(user_codes, user_lps):
                     if code not in best or lp > best[code]:
@@ -500,7 +504,9 @@ def train_tiger(
     ).to(device)
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = InverseSquareRootScheduler(optimizer=optimizer, warmup_steps=warmup_steps)
+    scheduler = InverseSquareRootScheduler(
+        optimizer=optimizer, warmup_steps=warmup_steps
+    )
 
     train_examples = build_training_examples(data.train_sequences())
     num_examples = len(train_examples)
@@ -530,8 +536,16 @@ def train_tiger(
 
         if verbose and eval_every and (step + 1) % eval_every == 0:
             val_metrics = evaluate_tiger(
-                data, model, tokenizer, "val", max_len, ks, device,
-                gen_mode=gen_mode, num_samples=num_samples, temperature=temperature,
+                data,
+                model,
+                tokenizer,
+                "val",
+                max_len,
+                ks,
+                device,
+                gen_mode=gen_mode,
+                num_samples=num_samples,
+                temperature=temperature,
                 seed=seed,
             )
             print(
@@ -664,6 +678,12 @@ def main() -> None:
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device.",
     )
+    parser.add_argument(
+        "--verbose",
+        type=bool,
+        default=False,
+        help="Evaluate between N epochs.",
+    )
     args = parser.parse_args()
     run(
         split=args.split,
@@ -678,6 +698,7 @@ def main() -> None:
         temperature=args.temperature,
         seed=args.seed,
         device=args.device,
+        verbose=args.verbose,
     )
 
 
