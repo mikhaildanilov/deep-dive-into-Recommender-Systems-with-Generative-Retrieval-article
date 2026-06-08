@@ -569,6 +569,7 @@ def run(
     temperature: float = DEFAULT_TEMPERATURE,
     seed: int = 42,
     device: str = "cpu",
+    verbose: bool = True,
 ) -> None:
     data = AmazonSequenceData(split=split)
     resolved_samples = (
@@ -600,6 +601,7 @@ def run(
         temperature=temperature,
         device=device,
         seed=seed,
+        verbose=verbose,
     )
     eval_kwargs = dict(
         gen_mode=gen_mode, num_samples=num_samples, temperature=temperature
