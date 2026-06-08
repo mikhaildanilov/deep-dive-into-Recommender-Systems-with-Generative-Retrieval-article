@@ -654,6 +654,12 @@ def main() -> None:
         default=42,
         help="Seed.",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Device.",
+    )
     args = parser.parse_args()
     run(
         split=args.split,
@@ -667,6 +673,7 @@ def main() -> None:
         num_samples=args.num_samples,
         temperature=args.temperature,
         seed=args.seed,
+        device=args.device,
     )
 
 
