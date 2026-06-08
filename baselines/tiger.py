@@ -28,7 +28,7 @@ Run:
 """
 
 import argparse
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -328,9 +328,18 @@ def evaluate_tiger(
     """
     examples = data.eval_examples(split)
     metrics = RankingMetrics(ks)
+
     model.eval()
     n_layers = tokenizer.n_layers
     codebook_size = model.num_embeddings_per_hierarchy
+
+    # Coverage: build reverse lookup encoded_code_id -> item_id
+    covered: Dict[int, set] = {k: set() for k in ks}
+    all_codes = tokenizer.cached_ids[:, :n_layers].to(device)
+    all_code_ids = _encode_code_id(all_codes, codebook_size)  # [num_items]
+    code_to_item = {int(cid): iid for iid, cid in enumerate(all_code_ids.cpu().tolist())}
+    num_items = len(code_to_item)
+
     sem_ids_dim = n_layers + 1
 
     if gen_mode == GEN_MODE_SAMPLE and num_samples is None:
@@ -380,6 +389,18 @@ def evaluate_tiger(
             sample_code_ids = _encode_code_id(codes, codebook_size)
             target_code_ids = _encode_code_id(target_codes, codebook_size)
             ranks = _ranks_from_samples(sample_code_ids, log_probs, target_code_ids)
+
+            # Coverage tracking: top-K unique codes per user by log_prob
+            for user_codes, user_lps in zip(sample_code_ids.tolist(), log_probs.tolist()):
+                best: dict = {}
+                for code, lp in zip(user_codes, user_lps):
+                    if code not in best or lp > best[code]:
+                        best[code] = lp
+                sorted_codes = sorted(best, key=best.__getitem__, reverse=True)
+                for k in ks:
+                    for code in sorted_codes[:k]:
+                        if code in code_to_item:
+                            covered[k].add(code_to_item[code])
         else:
             raise ValueError(
                 f"Unknown gen_mode {gen_mode!r}; use "
@@ -388,7 +409,11 @@ def evaluate_tiger(
 
         metrics.accumulate_from_ranks(ranks)
 
-    return metrics.reduce()
+    result = metrics.reduce()
+    for k in ks:
+        result[f"coverage@{k}"] = len(covered[k]) / num_items
+
+    return result
 
 
 def build_model(
