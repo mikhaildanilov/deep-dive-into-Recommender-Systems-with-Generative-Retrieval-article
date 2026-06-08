@@ -69,6 +69,17 @@ class RankingMetrics:
 
         self.total += batch_size
 
+    def accumulate_from_ranks(self, ranks: Tensor) -> None:
+        """Update metrics directly from 0-based target ranks ``[B]``."""
+        ranks = ranks.long()
+        for k in self.ks:
+            hit = ranks < k
+            self.recall[k] += hit.sum().item()
+            if hit.any():
+                gains = 1.0 / torch.log2(ranks[hit].float() + 2.0)
+                self.ndcg[k] += gains.sum().item()
+        self.total += ranks.numel()
+
     def reduce(self) -> Dict[str, float]:
         if self.total == 0:
             return {}
