@@ -654,7 +654,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--seed",
-        type=float,
+        type=int,
         default=42,
         help="Seed.",
     )
