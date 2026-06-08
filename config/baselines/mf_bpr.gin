@@ -11,3 +11,4 @@ run_baseline.epochs = 50          # passes over all (user, positive) pairs
 run_baseline.lr = 0.01
 run_baseline.batch_size = 2048
 run_baseline.mf_weight_decay = 1e-5
+    

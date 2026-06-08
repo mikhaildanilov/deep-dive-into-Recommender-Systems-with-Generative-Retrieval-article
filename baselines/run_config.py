@@ -1,16 +1,17 @@
-"""Config-driven launcher: pick and run a single baseline from a gin config.
+"""
+Run a baseline from a gin config.
 
-Mirrors the repository's existing gin workflow (see ``configs/*.gin`` and
-``modules.utils.parse_config``). A config file selects the baseline via
-``run_baseline.model`` and sets that model's hyperparameters; every parameter is
-read from the config so all models are tuned consistently in one place.
+The config selects the model with ``run_baseline.model`` and sets its
+hyperparameters. This keeps all baseline settings in one place and matches the
+repository's existing gin workflow.
 
+Examples:
     python -m baselines.run_config config/baselines/ease.gin
     python -m baselines.run_config config/baselines/sasrec.gin
 
-The single ``run_baseline`` function holds the union of all baselines'
-hyperparameters with sensible defaults; each config only sets the ones relevant
-to its model, and the dispatcher passes the right subset to the matching trainer.
+``run_baseline`` defines the full set of supported hyperparameters with default
+values. Each model config sets only the parameters it needs, and the launcher
+forwards the relevant ones to the matching trainer.
 """
 
 import argparse
@@ -111,6 +112,7 @@ def run_baseline(
     temperature: float = TIGER_DEFAULT_TEMPERATURE,
 ) -> None:
     """Dispatch to the baseline named by ``model`` using config hyperparameters."""
+    
     if model is None:
         raise ValueError(
             "Config must set run_baseline.model to one of " f"{VALID_MODELS}."
@@ -166,9 +168,7 @@ def run_baseline(
         m.eval()
         _eval_and_report(
             "SASRec",
-            lambda s: evaluate_next_item(
-                data, m.score_at_last, s, max_len, ks, device
-            ),
+            lambda s: evaluate_next_item(data, m.score_at_last, s, max_len, ks, device),
         )
 
     elif model == "bert4rec":
@@ -194,9 +194,7 @@ def run_baseline(
     else:  # tiger_random / tiger_lsh
         id_method = "random" if model == "tiger_random" else "lsh"
         embeddings = (
-            load_item_embeddings(split, data.num_items)
-            if id_method == "lsh"
-            else None
+            load_item_embeddings(split, data.num_items) if id_method == "lsh" else None
         )
         m, tokenizer = train_tiger(
             data,
@@ -225,8 +223,16 @@ def run_baseline(
         _eval_and_report(
             f"TIGER-{id_method}",
             lambda s: evaluate_tiger(
-                data, m, tokenizer, s, max_len, ks, device,
-                gen_mode=gen_mode, num_samples=num_samples, temperature=temperature,
+                data,
+                m,
+                tokenizer,
+                s,
+                max_len,
+                ks,
+                device,
+                gen_mode=gen_mode,
+                num_samples=num_samples,
+                temperature=temperature,
                 seed=seed,
             ),
         )

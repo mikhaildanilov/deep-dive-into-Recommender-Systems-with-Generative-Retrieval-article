@@ -1,2 +1,0 @@
-# deep-dive-into-Recommender-Systems-with-Generative-Retrieval-article
-This repository is aimed to reproduct results and extend research from the article Recommender Systems with Generative Retrieval (arXiv:2305.05065)
