@@ -106,8 +106,9 @@ def evaluate(
     metrics = RankingMetrics(ks, num_items=data.num_items)
     for start in range(0, len(examples), EVAL_BATCH_SIZE):
         batch = examples[start : start + EVAL_BATCH_SIZE]
-        # Row position equals user-embedding index (see module docstring).
-        user_idx = torch.arange(start, start + len(batch), device=device)
+        # Address each user by its row index (== user-embedding index): the
+        # temporal split yields a variable number of examples per user.
+        user_idx = torch.tensor([ex.user for ex in batch], device=device)
         scores = model.score_users(user_idx)
         targets = torch.tensor([ex.target for ex in batch], device=device)
         seen_mask = build_seen_mask([ex.seen for ex in batch], data.num_items, device)

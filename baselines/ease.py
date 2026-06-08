@@ -62,7 +62,9 @@ def evaluate(
 
     for start in range(0, len(examples), EVAL_BATCH_SIZE):
         batch = examples[start : start + EVAL_BATCH_SIZE]
-        rows = [start + i for i in range(len(batch))]
+        # Address each user by its row index, not the example position: the
+        # temporal split yields a variable number of examples per user.
+        rows = [ex.user for ex in batch]
         scores = _score_rows(user_item, weights, rows)
         targets = torch.tensor([ex.target for ex in batch], device=device)
         seen_mask = build_seen_mask([ex.seen for ex in batch], data.num_items, device)

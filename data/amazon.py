@@ -4,6 +4,7 @@ import numpy as np
 import os
 import os.path as osp
 import pandas as pd
+import pickle
 import polars as pl
 import torch
 
@@ -17,6 +18,16 @@ from torch_geometric.io import fs
 from typing import Callable
 from typing import List
 from typing import Optional
+
+
+SEQUENTIAL_DATA_FILE = "sequential_data.txt"
+DATAMAPS_FILE = "datamaps.json"
+REVIEW_SPLITS_FILE = "review_splits.pkl"
+META_FILE = "meta.json.gz"
+
+# Shortest sequence for which the leave-one-out fallback can hold out a
+# validation and a test item (train prefix + val + test).
+MIN_SEQUENCE_LENGTH = 3
 
 
 def parse(path):
@@ -62,44 +73,99 @@ class AmazonReviews(InMemoryDataset, PreprocessingMixin):
     def _remap_ids(self, x):
         return x - 1
 
-    def train_test_split(self, max_seq_len=20):
-        splits = ["train", "eval", "test"]
-        sequences = {sp: defaultdict(list) for sp in splits}
-        user_ids = []
-        with open(
-            os.path.join(self.raw_dir, self.split, "sequential_data.txt"), "r"
-        ) as f:
+    def _temporal_boundaries(self):
+        """Per-user contiguous (train, val, test) split sizes.
+
+        Mirrors ``baselines.data.AmazonSequenceData``: validation/test sizes come
+        from the global temporal split stored in ``review_splits.pkl`` (an
+        80/10/10 split over review time), recovered as per-user interaction
+        counts. Since ``sequential_data.txt`` is already time-ordered, the
+        boundaries are ``train = items[:n_train]``,
+        ``val = items[n_train : n_train + n_val]``, ``test = items[n_train + n_val:]``.
+        Falls back to leave-one-out (``n_val = n_test = 1``) when the pickle is
+        absent.
+
+        Returns ``(sequences, user_ids, n_val, n_test)`` aligned by user row.
+        """
+        base = os.path.join(self.raw_dir, self.split)
+        with open(os.path.join(base, DATAMAPS_FILE), "r") as f:
+            user2id = json.load(f)["user2id"]
+
+        user_ids, sequences, rawid_to_row = [], [], {}
+        with open(os.path.join(base, SEQUENTIAL_DATA_FILE), "r") as f:
             for line in f:
-                parsed_line = list(map(int, line.strip().split()))
-                user_ids.append(parsed_line[0])
-                items = [self._remap_ids(id) for id in parsed_line[1:]]
+                if not line.strip():
+                    continue
+                parsed = list(map(int, line.split()))
+                rawid_to_row[parsed[0]] = len(sequences)
+                user_ids.append(parsed[0])
+                sequences.append([self._remap_ids(i) for i in parsed[1:]])
 
-                # We keep the whole sequence without padding. Allows flexible training-time subsampling.
-                train_items = items[:-2]
-                sequences["train"]["itemId"].append(train_items)
-                sequences["train"]["itemId_fut"].append(items[-2])
+        n_users = len(sequences)
+        review_splits_path = os.path.join(base, REVIEW_SPLITS_FILE)
+        if os.path.exists(review_splits_path):
+            with open(review_splits_path, "rb") as f:
+                review_splits = pickle.load(f)
+            n_val = [0] * n_users
+            n_test = [0] * n_users
+            for split_name, counts in (("val", n_val), ("test", n_test)):
+                for review in review_splits.get(split_name, []):
+                    mapped = user2id.get(review["reviewerID"])
+                    if mapped is None:
+                        continue
+                    row = rawid_to_row.get(int(mapped))
+                    if row is not None:
+                        counts[row] += 1
+            # Keep the three segments non-negative and contiguous even if the
+            # counts and the sequence file are ever slightly out of sync.
+            for row, seq in enumerate(sequences):
+                seq_len = len(seq)
+                nt = min(n_test[row], seq_len)
+                nv = min(n_val[row], seq_len - nt)
+                n_test[row], n_val[row] = nt, nv
+        else:
+            # Leave-one-out fallback (classic P5 split).
+            held = [1 if len(s) >= MIN_SEQUENCE_LENGTH else 0 for s in sequences]
+            n_val, n_test = held, list(held)
 
-                eval_items = items[-(max_seq_len + 2) : -2]
-                sequences["eval"]["itemId"].append(
-                    eval_items + [-1] * (max_seq_len - len(eval_items))
-                )
-                sequences["eval"]["itemId_fut"].append(items[-2])
+        return sequences, user_ids, n_val, n_test
 
-                test_items = items[-(max_seq_len + 1) : -1]
-                sequences["test"]["itemId"].append(
-                    test_items + [-1] * (max_seq_len - len(test_items))
-                )
-                sequences["test"]["itemId_fut"].append(items[-1])
+    def train_test_split(self, max_seq_len=20):
+        sequences, user_ids, n_val, n_test = self._temporal_boundaries()
+        splits = ["train", "eval", "test"]
+        out = {sp: defaultdict(list) for sp in splits}
 
-        for sp in splits:
-            sequences[sp]["userId"] = user_ids
-            sequences[sp] = pl.from_dict(sequences[sp])
-        return sequences
+        def _add_eval(split, row, pos):
+            # One example per held-out interaction: history is the full prefix
+            # of items that occurred before it in time (capped at max_seq_len).
+            history = sequences[row][max(0, pos - max_seq_len) : pos]
+            out[split]["itemId"].append(history + [-1] * (max_seq_len - len(history)))
+            out[split]["itemId_fut"].append(sequences[row][pos])
+            out[split]["userId"].append(user_ids[row])
+
+        for row, seq in enumerate(sequences):
+            n_train = len(seq) - n_val[row] - n_test[row]
+
+            # Train: next-item over the train-period prefix only (no leakage).
+            # The whole prefix is kept unpadded for flexible training-time
+            # subsampling.
+            train_items = seq[:n_train]
+            if train_items:
+                out["train"]["itemId"].append(train_items[:-1])
+                out["train"]["itemId_fut"].append(train_items[-1])
+                out["train"]["userId"].append(user_ids[row])
+
+            for pos in range(n_train, n_train + n_val[row]):
+                _add_eval("eval", row, pos)
+            for pos in range(n_train + n_val[row], len(seq)):
+                _add_eval("test", row, pos)
+
+        return {sp: pl.from_dict(dict(out[sp])) for sp in splits}
 
     def process(self, max_seq_len=20) -> None:
         data = HeteroData()
 
-        with open(os.path.join(self.raw_dir, self.split, "datamaps.json"), "r") as f:
+        with open(os.path.join(self.raw_dir, self.split, DATAMAPS_FILE), "r") as f:
             data_maps = json.load(f)
 
         # Construct user sequences
@@ -120,7 +186,7 @@ class AmazonReviews(InMemoryDataset, PreprocessingMixin):
                 [
                     meta
                     for meta in parse(
-                        path=os.path.join(self.raw_dir, self.split, "meta.json.gz")
+                        path=os.path.join(self.raw_dir, self.split, META_FILE)
                     )
                 ]
             )
