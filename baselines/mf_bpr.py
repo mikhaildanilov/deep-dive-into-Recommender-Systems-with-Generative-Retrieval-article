@@ -103,7 +103,7 @@ def evaluate(
     device,
 ) -> dict:
     examples = data.eval_examples(split)
-    metrics = RankingMetrics(ks)
+    metrics = RankingMetrics(ks, num_items=data.num_items)
     for start in range(0, len(examples), EVAL_BATCH_SIZE):
         batch = examples[start : start + EVAL_BATCH_SIZE]
         # Row position equals user-embedding index (see module docstring).

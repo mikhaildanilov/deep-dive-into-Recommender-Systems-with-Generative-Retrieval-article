@@ -57,7 +57,7 @@ def evaluate(
 ) -> dict:
     """Score every evaluation user against the full catalogue and reduce metrics."""
     examples = data.eval_examples(split)
-    metrics = RankingMetrics(ks)
+    metrics = RankingMetrics(ks, num_items=data.num_items)
     device = weights.device
 
     for start in range(0, len(examples), EVAL_BATCH_SIZE):

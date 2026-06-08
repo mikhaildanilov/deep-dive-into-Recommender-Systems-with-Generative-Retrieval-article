@@ -26,14 +26,16 @@ NEG_INF = float("-inf")
 class RankingMetrics:
     """Accumulates Recall@k and NDCG@k over batches of scored items."""
 
-    def __init__(self, ks: List[int] = [5, 10]) -> None:
+    def __init__(self, ks: List[int] = [5, 10], num_items: int = 0) -> None:
         self.ks = sorted(ks)
+        self.num_items = num_items
         self.reset()
 
     def reset(self) -> None:
         self.total = 0
         self.recall: Dict[int, float] = defaultdict(float)
         self.ndcg: Dict[int, float] = defaultdict(float)
+        self.covered: Dict[int, set] = {k: set() for k in self.ks}
 
     @torch.no_grad()
     def accumulate(
@@ -42,14 +44,6 @@ class RankingMetrics:
         targets: Tensor,
         seen_mask: Optional[Tensor] = None,
     ) -> None:
-        """Update metrics from a batch.
-
-        Args:
-            scores:    ``[B, num_items]`` float scores (higher = better).
-            targets:   ``[B]`` long tensor of held-out target item ids.
-            seen_mask: optional ``[B, num_items]`` bool mask of items to exclude
-                       from ranking (e.g. items already in the user history).
-        """
         scores = scores.clone().float()
         targets = targets.long()
         batch_size = scores.size(0)
@@ -58,10 +52,8 @@ class RankingMetrics:
         target_scores = scores[rows, targets].clone()
         if seen_mask is not None:
             scores = scores.masked_fill(seen_mask, NEG_INF)
-        # The held-out target must never be masked out of its own ranking.
         scores[rows, targets] = target_scores
 
-        # 0-based rank = number of items strictly better than the target.
         ranks = (scores > target_scores.unsqueeze(1)).sum(dim=1)
 
         for k in self.ks:
@@ -70,22 +62,12 @@ class RankingMetrics:
             if hit.any():
                 gains = 1.0 / torch.log2(ranks[hit].float() + 2.0)
                 self.ndcg[k] += gains.sum().item()
+            # Coverage: track which items appear in top-k
+            if self.num_items > 0:
+                topk = scores.topk(k, dim=1).indices
+                self.covered[k].update(topk.cpu().numpy().flatten().tolist())
+
         self.total += batch_size
-
-    def accumulate_from_ranks(self, ranks: Tensor) -> None:
-        """Update metrics directly from 0-based target ranks ``[B]``.
-
-        Useful for models that score only a candidate subset rather than the
-        full item catalogue.
-        """
-        ranks = ranks.long()
-        for k in self.ks:
-            hit = ranks < k
-            self.recall[k] += hit.sum().item()
-            if hit.any():
-                gains = 1.0 / torch.log2(ranks[hit].float() + 2.0)
-                self.ndcg[k] += gains.sum().item()
-        self.total += ranks.numel()
 
     def reduce(self) -> Dict[str, float]:
         if self.total == 0:
@@ -94,6 +76,8 @@ class RankingMetrics:
         for k in self.ks:
             out[f"recall@{k}"] = self.recall[k] / self.total
             out[f"ndcg@{k}"] = self.ndcg[k] / self.total
+            if self.num_items > 0:
+                out[f"coverage@{k}"] = len(self.covered[k]) / self.num_items
         return out
 
 
