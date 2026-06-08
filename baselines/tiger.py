@@ -584,15 +584,17 @@ def run(
         gen_mode=gen_mode,
         num_samples=num_samples,
         temperature=temperature,
+        device=device,
+        seed=seed,
     )
     eval_kwargs = dict(
         gen_mode=gen_mode, num_samples=num_samples, temperature=temperature
     )
     val_metrics = evaluate_tiger(
-        data, model, tokenizer, "val", max_len, ks, "cpu", **eval_kwargs
+        data, model, tokenizer, "val", max_len, ks, device, **eval_kwargs
     )
     test_metrics = evaluate_tiger(
-        data, model, tokenizer, "test", max_len, ks, "cpu", **eval_kwargs
+        data, model, tokenizer, "test", max_len, ks, device, **eval_kwargs
     )
     print(f"[TIGER-{id_method}] VAL : {format_metrics(val_metrics)}")
     print(f"[TIGER-{id_method}] TEST: {format_metrics(test_metrics)}")
