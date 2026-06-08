@@ -553,6 +553,8 @@ def run(
     gen_mode: str = DEFAULT_GEN_MODE,
     num_samples: Optional[int] = None,
     temperature: float = DEFAULT_TEMPERATURE,
+    seed: int = 42,
+    device: str = "cpu",
 ) -> None:
     data = AmazonSequenceData(split=split)
     resolved_samples = (
