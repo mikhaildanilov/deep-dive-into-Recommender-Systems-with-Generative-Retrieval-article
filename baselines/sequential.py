@@ -81,7 +81,7 @@ def evaluate_next_item(
     scores (taken at the last real position).
     """
     examples = data.eval_examples(split)
-    metrics = RankingMetrics(ks)
+    metrics = RankingMetrics(ks, num_items=data.num_items)
     pad = pad_id(data.num_items)
 
     for start in range(0, len(examples), eval_batch_size):
