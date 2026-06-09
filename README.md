@@ -31,7 +31,7 @@
 
 ### 1. Бейзлайны - leave-one-out и temporal
 
-**`1-data-fast-baselines-loo.ipynb`** - leave-one-out сплит 
+**`1-data-fast-baselines-loo.ipynb`** - leave-one-out сплит  
 **`1-data-fast-baselines-temporal.ipynb`** - temporal сплит
 
 - Акселератор: **None** для EASE и MF-BPR, **GPU T4 x2** для SASRec и BERT4Rec (менять между группами ячеек, комментарии в ноутбуке)
@@ -41,7 +41,7 @@
 
 ### 2. TIGER (RQ-VAE) - leave-one-out и temporal
 
-**`2-tiger-rqvae-loo.ipynb`** - leave-one-out сплит 
+**`2-tiger-rqvae-loo.ipynb`** - leave-one-out сплит  
 **`2-tiger-rqvae-temporal.ipynb`** - temporal сплит
 
 - Акселератор: **GPU T4 x2**
