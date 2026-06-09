@@ -65,9 +65,13 @@ class PreprocessingMixin:
     def _encode_text_feature(text_feat, model=None):
         if model is None:
             model = build_text_encoder()
+        # ``model.encode`` expects a plain list/ndarray of strings. Newer
+        # sentence-transformers versions reject pandas/polars Series outright,
+        # so normalise any iterable (Series, ndarray, ...) to a list of str.
+        sentences = [str(s) for s in text_feat]
         embeddings = model.encode(
             batch_size=2,
-            sentences=text_feat,
+            sentences=sentences,
             show_progress_bar=True,
             convert_to_tensor=True,
         ).cpu()
@@ -91,11 +95,13 @@ class PreprocessingMixin:
             for feat in features
         }
         fut_out = {
-            feat + FUT_SUFFIX: torch.from_numpy(df.select(feat + FUT_SUFFIX).to_numpy())
+            feat + FUT_SUFFIX: torch.from_numpy(
+                df.select(feat + FUT_SUFFIX).to_numpy().copy()
+            )
             for feat in features
         }
         out.update(fut_out)
-        out["userId"] = torch.from_numpy(df.select("userId").to_numpy())
+        out["userId"] = torch.from_numpy(df.select("userId").to_numpy().copy())
         return out
 
     @staticmethod
