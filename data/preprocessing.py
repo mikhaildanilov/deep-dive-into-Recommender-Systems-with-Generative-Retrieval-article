@@ -84,16 +84,26 @@ class PreprocessingMixin:
 
     @staticmethod
     def _df_to_tensor_dict(df, features):
-        out = {
-            feat: torch.from_numpy(
-                rearrange(df.select(feat).to_numpy().squeeze().tolist(), "b d -> b d")
-            )
-            if df.select(
-                pl.col(feat).list.len().max() == pl.col(feat).list.len().min()
-            ).item()
-            else df.get_column("itemId").to_list()
-            for feat in features
-        }
+        out = {}
+        for feat in features:
+            col_dtype = df.schema[feat]
+
+            # После .list.to_array(N) колонка имеет тип Array[i64, N] — длина
+            # фиксирована по определению. List[i64] тоже проверяем через .list.
+            if isinstance(col_dtype, pl.Array):
+                is_fixed_len = True
+            else:
+                is_fixed_len = df.select(
+                    pl.col(feat).list.len().max() == pl.col(feat).list.len().min()
+                ).item()
+
+            if is_fixed_len:
+                arr = df.select(feat).to_numpy()
+                arr = arr.reshape(arr.shape[0], -1)  # безопасно при batch=1
+                out[feat] = torch.from_numpy(rearrange(arr.tolist(), "b d -> b d"))
+            else:
+                out[feat] = df.get_column("itemId").to_list()
+
         fut_out = {
             feat + FUT_SUFFIX: torch.from_numpy(
                 df.select(feat + FUT_SUFFIX).to_numpy().copy()
@@ -149,6 +159,7 @@ class PreprocessingMixin:
                         .list.concat(
                             pl.lit(-1, dtype=pl.Int64).repeat_by(pl.col("pad_len"))
                         )
+                        .list.to_array(max_seq_len)
                     )
                     .otherwise(
                         pl.col(feat)
@@ -156,6 +167,7 @@ class PreprocessingMixin:
                         .list.concat(
                             pl.lit(-1, dtype=pl.Int64).repeat_by(pl.col("pad_len") + 1)
                         )
+                        .list.to_array(max_seq_len)
                     )
                     for feat in features
                 ),
