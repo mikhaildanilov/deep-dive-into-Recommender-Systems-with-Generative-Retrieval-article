@@ -4,15 +4,10 @@ import pandas as pd
 import polars as pl
 import torch
 from data.schemas import FUT_SUFFIX
-from einops import rearrange
 from sentence_transformers import SentenceTransformer
 from typing import List
 
 
-# Supported sentence-T5 encoder sizes mapped to their HuggingFace model ids.
-# The sentence-transformers/sentence-t5 family is published only in these four
-# sizes, and every one of them outputs 768-dim embeddings, which is exactly what
-# the downstream RQ-VAE pipeline expects (vae_input_dim=768).
 T5_ENCODER_MODELS = {
     "base": "sentence-transformers/sentence-t5-base",
     "large": "sentence-transformers/sentence-t5-large",
@@ -47,8 +42,7 @@ class PreprocessingMixin:
             if missing > 0:
                 idxs = np.array(list(idxs) + missing * [0])
             idx_list.append(idxs)
-        out = np.stack(idx_list)
-        return out
+        return np.stack(idx_list)
 
     @staticmethod
     def _remove_low_occurrence(source_df, target_df, index_col):
@@ -65,54 +59,18 @@ class PreprocessingMixin:
     def _encode_text_feature(text_feat, model=None):
         if model is None:
             model = build_text_encoder()
-        # ``model.encode`` expects a plain list/ndarray of strings. Newer
-        # sentence-transformers versions reject pandas/polars Series outright,
-        # so normalise any iterable (Series, ndarray, ...) to a list of str.
         sentences = [str(s) for s in text_feat]
-        embeddings = model.encode(
+        return model.encode(
             batch_size=2,
             sentences=sentences,
             show_progress_bar=True,
             convert_to_tensor=True,
         ).cpu()
-        return embeddings
 
     @staticmethod
     def _ordered_train_test_split(df, on, train_split=0.8):
         threshold = df.select(pl.quantile(on, train_split)).item()
         return df.with_columns(is_train=pl.col(on) <= threshold)
-
-    @staticmethod
-    def _df_to_tensor_dict(df, features):
-        out = {}
-        for feat in features:
-            col_dtype = df.schema[feat]
-
-            # После .list.to_array(N) колонка имеет тип Array[i64, N] — длина
-            # фиксирована по определению. List[i64] тоже проверяем через .list.
-            if isinstance(col_dtype, pl.Array):
-                is_fixed_len = True
-            else:
-                is_fixed_len = df.select(
-                    pl.col(feat).list.len().max() == pl.col(feat).list.len().min()
-                ).item()
-
-            if is_fixed_len:
-                arr = df.select(feat).to_numpy()
-                arr = arr.reshape(arr.shape[0], -1)  # безопасно при batch=1
-                out[feat] = torch.from_numpy(rearrange(arr.tolist(), "b d -> b d"))
-            else:
-                out[feat] = df.get_column("itemId").to_list()
-
-        fut_out = {
-            feat + FUT_SUFFIX: torch.from_numpy(
-                df.select(feat + FUT_SUFFIX).to_numpy().copy()
-            )
-            for feat in features
-        }
-        out.update(fut_out)
-        out["userId"] = torch.from_numpy(df.select("userId").to_numpy().copy())
-        return out
 
     @staticmethod
     def _generate_user_history(
@@ -121,72 +79,74 @@ class PreprocessingMixin:
         window_size: int = 200,
         stride: int = 1,
         train_split: float = 0.8,
-    ) -> torch.Tensor:
+    ) -> dict:
+        """История пользователей через глобальный порог по timestamp.
 
-        if isinstance(ratings_df, pd.DataFrame):
-            ratings_df = pl.from_pandas(ratings_df)
+        Для каждого пользователя:
+          train — все события с timestamp <= t_train, fut = -1
+          eval  — train-префикс как вход, первое событие после t_train как цель
 
-        grouped_by_user = (
-            ratings_df.sort("userId", "timestamp")
-            .group_by_dynamic(
-                index_column=pl.int_range(pl.len()),
-                every=f"{stride}i",
-                period=f"{window_size}i",
-                by="userId",
+        features-колонки возвращаются как списки списков (переменная длина) —
+        processed.py добивает паддингом через pad_sequence самостоятельно.
+        """
+        if isinstance(ratings_df, pl.DataFrame):
+            ratings_df = ratings_df.to_pandas()
+
+        ratings_df = (
+            ratings_df.sort_values(["userId", "timestamp"])
+            .reset_index(drop=True)
+        )
+
+        t_train = ratings_df["timestamp"].quantile(train_split)
+
+        train_rows, eval_rows = [], []
+
+        for uid, group in ratings_df.groupby("userId", sort=True):
+            group = group.sort_values("timestamp")
+            mask_train = group["timestamp"] <= t_train
+
+            train_feat = {f: group.loc[mask_train, f].tolist() for f in features}
+            eval_feat  = {f: group.loc[~mask_train, f].tolist() for f in features}
+
+            if not train_feat[features[0]]:
+                continue
+
+            train_rows.append({
+                "userId": uid,
+                **{f: train_feat[f] for f in features},
+                **{f + FUT_SUFFIX: -1 for f in features},
+            })
+
+            if eval_feat[features[0]]:
+                eval_rows.append({
+                    "userId": uid,
+                    **{f: train_feat[f] for f in features},
+                    **{f + FUT_SUFFIX: eval_feat[f][0] for f in features},
+                })
+
+        if not train_rows:
+            raise ValueError(
+                "Train split is empty — проверьте данные или train_split."
             )
-            .agg(
-                *(pl.col(feat) for feat in features),
-                seq_len=pl.col(features[0]).len(),
-                max_timestamp=pl.max("timestamp"),
+        if not eval_rows:
+            raise ValueError(
+                "Eval split is empty — нет пользователей с событиями после t_train."
             )
-        )
 
-        max_seq_len = grouped_by_user.select(pl.col("seq_len").max()).item()
-        split_grouped_by_user = PreprocessingMixin._ordered_train_test_split(
-            grouped_by_user, "max_timestamp", 0.8
-        )
-        padded_history = (
-            split_grouped_by_user.with_columns(pad_len=max_seq_len - pl.col("seq_len"))
-            .filter(pl.col("is_train").or_(pl.col("seq_len") > 1))
-            .select(
-                pl.col("userId"),
-                pl.col("max_timestamp"),
-                pl.col("is_train"),
-                *(
-                    pl.when(pl.col("is_train"))
-                    .then(
-                        pl.col(feat)
-                        .list.concat(
-                            pl.lit(-1, dtype=pl.Int64).repeat_by(pl.col("pad_len"))
-                        )
-                        .list.to_array(max_seq_len)
-                    )
-                    .otherwise(
-                        pl.col(feat)
-                        .list.slice(0, pl.col("seq_len") - 1)
-                        .list.concat(
-                            pl.lit(-1, dtype=pl.Int64).repeat_by(pl.col("pad_len") + 1)
-                        )
-                        .list.to_array(max_seq_len)
-                    )
-                    for feat in features
-                ),
-                *(
-                    pl.when(pl.col("is_train"))
-                    .then(pl.lit(-1, dtype=pl.Int64))
-                    .otherwise(pl.col(feat).list.get(-1))
-                    .alias(feat + FUT_SUFFIX)
-                    for feat in features
-                ),
+        def make_split(rows):
+            result = {}
+            for f in features:
+                # список списков — pad_sequence в processed.py ждёт именно это
+                result[f] = [r[f] for r in rows]
+                result[f + FUT_SUFFIX] = torch.tensor(
+                    [r[f + FUT_SUFFIX] for r in rows], dtype=torch.long
+                )
+            result["userId"] = torch.tensor(
+                [r["userId"] for r in rows], dtype=torch.long
             )
-        )
+            return result
 
-        out = {}
-        out["train"] = PreprocessingMixin._df_to_tensor_dict(
-            padded_history.filter(pl.col("is_train")), features
-        )
-        out["eval"] = PreprocessingMixin._df_to_tensor_dict(
-            padded_history.filter(pl.col("is_train").not_()), features
-        )
-
-        return out
+        return {
+            "train": make_split(train_rows),
+            "eval":  make_split(eval_rows),
+        }

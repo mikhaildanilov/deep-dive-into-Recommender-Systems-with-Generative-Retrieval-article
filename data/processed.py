@@ -155,7 +155,7 @@ class SeqData(Dataset):
 
         else:
             item_ids = self.sequence_data["itemId"][idx]
-            item_ids_fut = self.sequence_data["itemId_fut"][idx]
+            item_ids_fut = self.sequence_data["itemId_fut"][idx].unsqueeze(0)
 
         assert (item_ids >= -1).all(), "Invalid movie id found"
         x = self.item_data[item_ids, :768]

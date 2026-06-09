@@ -135,7 +135,7 @@ def train(
     model = EncoderDecoderRetrievalModel(
         codebooks=codebooks,
         num_hierarchies=vae_n_layers,
-        num_embeddings_per_hierarchy=vae_codebook_size,
+        num_embeddings_per_hierarchy=max(vae_codebook_size) if isinstance(vae_codebook_size, list) else vae_codebook_size,
         t5_d_model=t5_d_model,
         t5_num_heads=t5_num_heads,
         t5_d_ff=t5_d_ff,
