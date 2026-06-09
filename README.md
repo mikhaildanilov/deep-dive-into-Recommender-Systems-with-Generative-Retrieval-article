@@ -31,8 +31,8 @@
 
 ### 1. Бейзлайны - leave-one-out и temporal
 
-**`1-data-fast-baselines-loo.ipynb`**
-**`1-data-fast-baselines-temporal.ipynb`**
+**`1-data-fast-baselines-loo.ipynb`** - leave-one-out сплит 
+**`1-data-fast-baselines-temporal.ipynb`** - temporal сплит
 
 - Акселератор: **None** для EASE и MF-BPR, **GPU T4 x2** для SASRec и BERT4Rec (менять между группами ячеек, комментарии в ноутбуке)
 - Запускает: EASE, MF-BPR (3 сида), SASRec (3 сида), BERT4Rec (3 сида)
@@ -41,8 +41,8 @@
 
 ### 2. TIGER (RQ-VAE) - leave-one-out и temporal
 
-**`2-tiger-rqvae-loo.ipynb`**
-**`2-tiger-rqvae-temporal.ipynb`**
+**`2-tiger-rqvae-loo.ipynb`** - leave-one-out сплит 
+**`2-tiger-rqvae-temporal.ipynb`** - temporal сплит
 
 - Акселератор: **GPU T4 x2**
 - Требует: `data_beauty.pt`, загружен как Kaggle Dataset (из ноутбука 0)
