@@ -555,6 +555,7 @@ def run(
     temperature: float = DEFAULT_TEMPERATURE,
     seed: int = 42,
     device: str = "cpu",
+    verbose: bool = True,
 ) -> None:
     data = AmazonSequenceData(split=split)
     resolved_samples = (
@@ -586,6 +587,7 @@ def run(
         temperature=temperature,
         device=device,
         seed=seed,
+        verbose=verbose,
     )
     eval_kwargs = dict(
         gen_mode=gen_mode, num_samples=num_samples, temperature=temperature
@@ -664,6 +666,13 @@ def main() -> None:
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device.",
     )
+    parser.add_argument(
+        "--verbose",
+        type=bool,
+        default=False,
+        help="Evaluate between N epochs.",
+    )
+
     args = parser.parse_args()
     run(
         split=args.split,
@@ -678,6 +687,7 @@ def main() -> None:
         temperature=args.temperature,
         seed=args.seed,
         device=args.device,
+        verbose=args.verbose,
     )
 
 
