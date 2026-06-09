@@ -29,17 +29,21 @@
 
 ---
 
-### 1. Бейзлайны - leave-one-out
+### 1. Бейзлайны - leave-one-out и temporal
 
-**`1-data-fast-baselines_loo.ipynb`**
+**`1-data-fast-baselines-loo.ipynb`**
+**`1-data-fast-baselines-temporal.ipynb`**
+
 - Акселератор: **None** для EASE и MF-BPR, **GPU T4 x2** для SASRec и BERT4Rec (менять между группами ячеек, комментарии в ноутбуке)
 - Запускает: EASE, MF-BPR (3 сида), SASRec (3 сида), BERT4Rec (3 сида)
 
 ---
 
-### 2. TIGER (RQ-VAE) - leave-one-out
+### 2. TIGER (RQ-VAE) - leave-one-out и temporal
 
 **`2-tiger-rqvae-loo.ipynb`**
+**`2-tiger-rqvae-temporal.ipynb`**
+
 - Акселератор: **GPU T4 x2**
 - Требует: `data_beauty.pt`, загружен как Kaggle Dataset (из ноутбука 0)
 - Перед запуском: заменить `<YOUR PATH>` в ячейке копирования данных на путь к своему датасету и `<YOUR WANDB API KEY>` в последней ячейке на свой ключ (или поставить false, если не нужно)
