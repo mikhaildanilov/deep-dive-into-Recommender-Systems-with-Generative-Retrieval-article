@@ -4,7 +4,6 @@ import pandas as pd
 import polars as pl
 import torch
 from data.schemas import FUT_SUFFIX
-from einops import rearrange
 from sentence_transformers import SentenceTransformer
 from typing import List
 
@@ -83,15 +82,23 @@ class PreprocessingMixin:
         return df.with_columns(is_train=pl.col(on) <= threshold)
 
     @staticmethod
+    def _column_is_fixed_length(df, feat):
+        # ``Array`` columns are fixed-width by construction (e.g. produced by
+        # ``list.to_array``), so the ``.list`` namespace cannot be used on them.
+        # ``List`` columns are only "fixed length" when every row shares the same
+        # length and can therefore be stacked into a single 2-D tensor.
+        if isinstance(df.schema[feat], pl.Array):
+            return True
+        return df.select(
+            pl.col(feat).list.len().max() == pl.col(feat).list.len().min()
+        ).item()
+
+    @staticmethod
     def _df_to_tensor_dict(df, features):
         out = {
-            feat: torch.from_numpy(
-                rearrange(df.select(feat).to_numpy().squeeze().tolist(), "b d -> b d")
-            )
-            if df.select(
-                pl.col(feat).list.len().max() == pl.col(feat).list.len().min()
-            ).item()
-            else df.get_column("itemId").to_list()
+            feat: torch.from_numpy(np.array(df.get_column(feat).to_list()))
+            if PreprocessingMixin._column_is_fixed_length(df, feat)
+            else df.get_column(feat).to_list()
             for feat in features
         }
         fut_out = {
