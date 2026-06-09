@@ -1,0 +1,42 @@
+import data.processed
+import data.preprocessing
+
+train.iterations=20000
+train.learning_rate=0.001
+train.weight_decay=0.0001
+train.batch_size=64
+train.vae_input_dim=768
+train.vae_hidden_dims=[512, 256, 128]
+train.vae_embed_dim=32
+train.vae_n_cat_feats=0
+train.vae_codebook_size=256
+train.vae_n_layers=3
+train.wandb_logging=False
+# Point this at the RQ-VAE checkpoint produced by configs/rqvae_ml1m.gin.
+train.pretrained_rqvae_path="out/rqvae/ml1m/checkpoint_49999.pt"
+train.save_dir_root="out/decoder/ml1m/"
+train.dataset_folder="dataset/ml-1m"
+train.dataset=%data.processed.RecDataset.ML_1M
+train.force_dataset_process=False
+train.full_eval_every=1000
+train.partial_eval_every=5000
+# MovieLens train sequences are stored as fixed-length padded tensors, so the
+# Amazon-style list subsampling is disabled (it expects variable-length lists).
+train.train_data_subsample=False
+train.t5_d_model=128
+train.t5_num_heads=6
+train.t5_d_ff=1024
+train.t5_num_layers=4
+train.top_k_for_generation=10
+train.should_add_sep_token=True
+
+# Evaluation cutoffs (recall@k / ndcg@k / h@k are reported for each k).
+train.top_k_eval_list=[1, 5, 10, 50, 100]
+# Decoding for long recommendation lists at eval time:
+#   "beam"   -- exact sampling-based beam search (use only for small k);
+#   "sample" -- stochastic sampling of a large candidate pool (supports k=50,100).
+train.eval_gen_mode="sample"
+train.eval_num_samples=1000
+
+# T5 text-encoder size: base | large | xl | xxl
+build_text_encoder.model_size="base"

@@ -1,0 +1,11 @@
+# EASE on MovieLens-1M -- closed-form linear item-item autoencoder (Steck, 2019).
+# No training loop; the only hyperparameter is the L2 regularisation `ease_reg`.
+
+run_baseline.model = "ease"
+run_baseline.dataset = "ml-1m"
+run_baseline.ks = [5, 10, 50, 100]
+run_baseline.seed = 42
+
+# L2 regularisation strength. Set ease_tune=True to grid-search it on val.
+run_baseline.ease_reg = 250.0
+run_baseline.ease_tune = False

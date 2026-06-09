@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData, build_seen_mask
+from baselines.data import SequenceData, build_seen_mask, make_sequence_data
 from baselines.metrics import RankingMetrics, format_metrics
 from baselines.sequential import left_pad, pad_id
 from tqdm import trange
@@ -147,7 +147,7 @@ def _mask_sequence(
 
 @torch.no_grad()
 def evaluate(
-    data: AmazonSequenceData,
+    data: SequenceData,
     model: BERT4Rec,
     split: str,
     max_len: int,
@@ -176,7 +176,7 @@ def evaluate(
 
 
 def train_bert4rec(
-    data: AmazonSequenceData,
+    data: SequenceData,
     dim: int = DEFAULT_DIM,
     num_layers: int = DEFAULT_LAYERS,
     num_heads: int = DEFAULT_HEADS,
@@ -243,9 +243,13 @@ def run(
     ks: List[int],
     device: str = "cpu",
     seed: int = 42,
+    dataset: str = "amazon",
 ) -> None:
-    data = AmazonSequenceData(split=split)
-    print(f"[BERT4Rec] split={split} users={len(data)} items={data.num_items} seed={seed}")
+    data = make_sequence_data(dataset, split)
+    print(
+        f"[BERT4Rec] dataset={dataset} split={split} "
+        f"users={len(data)} items={data.num_items} seed={seed}"
+    )
     model = train_bert4rec(data, dim=dim, epochs=epochs, max_len=max_len, ks=ks, device=device, seed=seed)
     val_metrics = evaluate(data, model, "val", max_len, ks, device)
     test_metrics = evaluate(data, model, "test", max_len, ks, device)
@@ -254,7 +258,8 @@ def run(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="BERT4Rec baseline on Amazon Reviews.")
+    parser = argparse.ArgumentParser(description="BERT4Rec baseline (Amazon / ML-1M).")
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument("--dim", type=int, default=DEFAULT_DIM)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
@@ -271,6 +276,7 @@ def main() -> None:
         ks=args.ks,
         device=args.device,
         seed=args.seed,
+        dataset=args.dataset,
     )
 
 

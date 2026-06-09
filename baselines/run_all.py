@@ -21,28 +21,28 @@ TIGER_MODELS = {"tiger_random", "tiger_lsh"}
 ALL_MODELS = ["ease", "mf_bpr", "sasrec", "bert4rec", "tiger_random", "tiger_lsh"]
 
 
-def _run_one(model: str, split: str, epochs: int, ks: List[int]) -> None:
+def _run_one(model: str, split: str, epochs: int, ks: List[int], dataset: str) -> None:
     print(f"\n{'=' * 70}\n>>> {model.upper()}\n{'=' * 70}")
 
     if model == "ease":
         from baselines.ease import run as ease_run
 
-        ease_run(split=split, reg=250.0, ks=ks, tune=False)
+        ease_run(split=split, reg=250.0, ks=ks, tune=False, dataset=dataset)
 
     elif model == "mf_bpr":
         from baselines.mf_bpr import run as mf_run
 
-        mf_run(split=split, dim=64, epochs=epochs, lr=0.01, ks=ks)
+        mf_run(split=split, dim=64, epochs=epochs, lr=0.01, ks=ks, seed=42, dataset=dataset)
 
     elif model == "sasrec":
         from baselines.sasrec import run as sasrec_run
 
-        sasrec_run(split=split, dim=64, epochs=epochs, max_len=50, ks=ks)
+        sasrec_run(split=split, dim=64, epochs=epochs, max_len=50, ks=ks, dataset=dataset)
 
     elif model == "bert4rec":
         from baselines.bert4rec import run as bert_run
 
-        bert_run(split=split, dim=64, epochs=epochs, max_len=50, ks=ks)
+        bert_run(split=split, dim=64, epochs=epochs, max_len=50, ks=ks, dataset=dataset)
 
     elif model in TIGER_MODELS:
         from baselines.tiger import run as tiger_run
@@ -56,6 +56,7 @@ def _run_one(model: str, split: str, epochs: int, ks: List[int]) -> None:
             max_len=20,
             epochs=epochs,
             ks=ks,
+            dataset=dataset,
         )
     else:
         raise ValueError(f"Unknown model {model!r}.")
@@ -66,6 +67,7 @@ def main() -> None:
     parser.add_argument(
         "--model", type=str, default="all", choices=ALL_MODELS + ["all"]
     )
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument(
         "--epochs",
@@ -86,7 +88,7 @@ def main() -> None:
             epochs = 100
         else:
             epochs = 50
-        _run_one(model, args.split, epochs, args.ks)
+        _run_one(model, args.split, epochs, args.ks, args.dataset)
 
 
 if __name__ == "__main__":

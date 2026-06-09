@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData, build_seen_mask
+from baselines.data import SequenceData, build_seen_mask, make_sequence_data
 from baselines.metrics import RankingMetrics, format_metrics
 
 DEFAULT_DIM = 64
@@ -96,7 +96,7 @@ def _sample_negatives(
 
 @torch.no_grad()
 def evaluate(
-    data: AmazonSequenceData,
+    data: SequenceData,
     model: MFBPR,
     split: str,
     ks: List[int],
@@ -117,7 +117,7 @@ def evaluate(
 
 
 def train_mf_bpr(
-    data: AmazonSequenceData,
+    data: SequenceData,
     dim: int = DEFAULT_DIM,
     epochs: int = DEFAULT_EPOCHS,
     lr: float = DEFAULT_LR,
@@ -173,9 +173,20 @@ def train_mf_bpr(
     return model
 
 
-def run(split: str, dim: int, epochs: int, lr: float, ks: List[int], seed: int) -> None:
-    data = AmazonSequenceData(split=split)
-    print(f"[MF-BPR] split={split} users={len(data)} items={data.num_items} seed={seed}")
+def run(
+    split: str,
+    dim: int,
+    epochs: int,
+    lr: float,
+    ks: List[int],
+    seed: int,
+    dataset: str = "amazon",
+) -> None:
+    data = make_sequence_data(dataset, split)
+    print(
+        f"[MF-BPR] dataset={dataset} split={split} "
+        f"users={len(data)} items={data.num_items} seed={seed}"
+    )
     model = train_mf_bpr(data, dim=dim, epochs=epochs, lr=lr, ks=ks, seed=seed)
     val_metrics = evaluate(data, model, "val", ks, "cpu")
     test_metrics = evaluate(data, model, "test", ks, "cpu")
@@ -184,7 +195,8 @@ def run(split: str, dim: int, epochs: int, lr: float, ks: List[int], seed: int) 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="MF-BPR baseline on Amazon Reviews.")
+    parser = argparse.ArgumentParser(description="MF-BPR baseline (Amazon / ML-1M).")
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument("--dim", type=int, default=DEFAULT_DIM)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
@@ -192,7 +204,15 @@ def main() -> None:
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    run(split=args.split, dim=args.dim, epochs=args.epochs, lr=args.lr, ks=args.ks, seed=args.seed)
+    run(
+        split=args.split,
+        dim=args.dim,
+        epochs=args.epochs,
+        lr=args.lr,
+        ks=args.ks,
+        seed=args.seed,
+        dataset=args.dataset,
+    )
 
 
 if __name__ == "__main__":

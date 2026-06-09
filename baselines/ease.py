@@ -23,7 +23,7 @@ from typing import List
 import torch
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData, build_seen_mask
+from baselines.data import SequenceData, build_seen_mask, make_sequence_data
 from baselines.metrics import RankingMetrics, format_metrics
 
 DEFAULT_REG = 250.0
@@ -49,7 +49,7 @@ def _score_rows(user_item: Tensor, weights: Tensor, rows: List[int]) -> Tensor:
 
 
 def evaluate(
-    data: AmazonSequenceData,
+    data: SequenceData,
     user_item: Tensor,
     weights: Tensor,
     split: str,
@@ -73,10 +73,19 @@ def evaluate(
     return metrics.reduce()
 
 
-def run(split: str, reg: float, ks: List[int], tune: bool) -> None:
-    data = AmazonSequenceData(split=split)
+def run(
+    split: str,
+    reg: float,
+    ks: List[int],
+    tune: bool,
+    dataset: str = "amazon",
+) -> None:
+    data = make_sequence_data(dataset, split)
     user_item = data.user_item_matrix()
-    print(f"[EASE] split={split} users={user_item.size(0)} items={data.num_items}")
+    print(
+        f"[EASE] dataset={dataset} split={split} "
+        f"users={user_item.size(0)} items={data.num_items}"
+    )
 
     if tune:
         best_reg, best_score = None, -1.0
@@ -99,13 +108,14 @@ def run(split: str, reg: float, ks: List[int], tune: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="EASE baseline on Amazon Reviews.")
+    parser = argparse.ArgumentParser(description="EASE baseline (Amazon / ML-1M).")
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument("--reg", type=float, default=DEFAULT_REG)
     parser.add_argument("--ks", type=int, nargs="+", default=DEFAULT_KS)
     parser.add_argument("--tune", action="store_true", help="Grid-search reg on val.")
     args = parser.parse_args()
-    run(split=args.split, reg=args.reg, ks=args.ks, tune=args.tune)
+    run(split=args.split, reg=args.reg, ks=args.ks, tune=args.tune, dataset=args.dataset)
 
 
 if __name__ == "__main__":

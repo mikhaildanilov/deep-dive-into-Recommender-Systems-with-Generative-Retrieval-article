@@ -66,7 +66,7 @@ def train(
     eval_gen_mode="beam",
     eval_num_samples=1000,
 ):
-    if dataset != RecDataset.AMAZON:
+    if dataset not in (RecDataset.AMAZON, RecDataset.ML_1M):
         raise Exception(f"Dataset currently not supported: {dataset}.")
 
     if wandb_logging:

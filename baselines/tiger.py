@@ -35,7 +35,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData
+from baselines.data import SequenceData, make_sequence_data
 from baselines.metrics import RankingMetrics, format_metrics
 from baselines.tiger_ids import build_id_table
 from modules.model import EncoderDecoderRetrievalModel, _strip_dedup_col
@@ -307,7 +307,7 @@ def _ranks_from_samples(
 
 @torch.no_grad()
 def evaluate_tiger(
-    data: AmazonSequenceData,
+    data: SequenceData,
     model: EncoderDecoderRetrievalModel,
     tokenizer: PrecomputedIdTokenizer,
     split: str,
@@ -441,7 +441,7 @@ def build_model(
 
 
 def train_tiger(
-    data: AmazonSequenceData,
+    data: SequenceData,
     id_method: str,
     embeddings: Optional[Tensor] = None,
     n_layers: int = DEFAULT_N_LAYERS,
@@ -556,8 +556,9 @@ def run(
     seed: int = 42,
     device: str = "cpu",
     verbose: bool = True,
+    dataset: str = "amazon",
 ) -> None:
-    data = AmazonSequenceData(split=split)
+    data = make_sequence_data(dataset, split)
     resolved_samples = (
         num_samples
         if (gen_mode == GEN_MODE_BEAM or num_samples is not None)
@@ -570,7 +571,7 @@ def run(
 
     embeddings = None
     if id_method == "lsh":
-        embeddings = load_item_embeddings(split, data.num_items)
+        embeddings = load_item_embeddings(data, split, dataset=dataset)
 
     model, tokenizer = train_tiger(
         data,
@@ -602,12 +603,21 @@ def run(
     print(f"[TIGER-{id_method}] TEST: {format_metrics(test_metrics)}")
 
 
-def load_item_embeddings(split: str, num_items: int) -> Tensor:
-    """Load the content embeddings used by the LSH ablation.
+def load_item_embeddings(
+    data: SequenceData, split: str, dataset: str = "amazon"
+) -> Tensor:
+    """Load the 768-dim content embeddings used by the LSH ablation.
 
-    Reuses the repository's processed item features (the same 768-dim sentence-T5
-    embeddings that feed RQ-VAE), so LSH operates on identical content.
+    For Amazon this reuses the repository's processed item features (the same
+    sentence-T5 embeddings that feed RQ-VAE). For MovieLens-1M the baseline's
+    k-core item universe differs from the main pipeline's, so embeddings are
+    encoded on the fly from ``movies.dat`` (title + genres) aligned to the
+    baseline's own item ids via :attr:`MovieLens1MSequenceData.dense_id_to_movie`.
     """
+    name = (dataset or "amazon").lower()
+    if name in ("ml-1m", "ml1m", "movielens1m", "movielens-1m"):
+        return _movielens1m_item_embeddings(data)
+
     from data.processed import ItemData, RecDataset
 
     item_data = ItemData(
@@ -617,15 +627,46 @@ def load_item_embeddings(split: str, num_items: int) -> Tensor:
         train_test_split="all",
     )
     embeddings = item_data.item_data[:, :768]
-    if embeddings.size(0) != num_items:
+    if embeddings.size(0) != data.num_items:
         raise ValueError(
-            f"Loaded {embeddings.size(0)} item embeddings but expected {num_items}."
+            f"Loaded {embeddings.size(0)} item embeddings but expected "
+            f"{data.num_items}."
         )
     return embeddings
 
 
+def _movielens1m_item_embeddings(data: SequenceData) -> Tensor:
+    """Encode ml-1m item content (title + genres) for the baseline's items."""
+    import os.path as osp
+
+    import pandas as pd
+    from data.preprocessing import build_text_encoder
+
+    movies_path = osp.join(data.root, "raw", "movies.dat")
+    movies = pd.read_csv(
+        movies_path,
+        sep="::",
+        header=None,
+        index_col=0,
+        names=["movieId", "title", "genres"],
+        engine="python",
+        encoding="ISO-8859-1",
+    )
+    sentences = []
+    for movie_id in data.dense_id_to_movie:
+        row = movies.loc[movie_id]
+        title = str(row["title"]).split("(")[0].strip()
+        genres = str(row["genres"]).replace("|", ", ")
+        sentences.append(f"Title: {title}; Genres: {genres};")
+    embeddings = build_text_encoder().encode(
+        sentences=sentences, convert_to_tensor=True, show_progress_bar=True
+    ).cpu()
+    return embeddings[:, :768]
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="TIGER ablations on Amazon Reviews.")
+    parser = argparse.ArgumentParser(description="TIGER ablations (Amazon / ML-1M).")
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument(
         "--id-method", type=str, default="random", choices=["random", "lsh"]
@@ -688,6 +729,7 @@ def main() -> None:
         seed=args.seed,
         device=args.device,
         verbose=args.verbose,
+        dataset=args.dataset,
     )
 
 

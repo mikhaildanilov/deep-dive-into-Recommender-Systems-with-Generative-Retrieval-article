@@ -1,0 +1,19 @@
+# BERT4Rec on MovieLens-1M -- bidirectional Transformer (Cloze objective).
+
+run_baseline.model = "bert4rec"
+run_baseline.dataset = "ml-1m"
+run_baseline.ks = [5, 10, 50, 100]
+run_baseline.seed = 42
+run_baseline.device = "cpu"
+
+run_baseline.dim = 64
+run_baseline.num_layers = 2
+run_baseline.num_heads = 2
+# MovieLens users have long histories, so a larger context than the Amazon
+# default (50) is used.
+run_baseline.max_len = 200
+run_baseline.dropout = 0.2
+run_baseline.mask_prob = 0.2      # fraction of items masked per sequence
+run_baseline.epochs = 100         # passes over all training sequences
+run_baseline.lr = 0.001
+run_baseline.batch_size = 128

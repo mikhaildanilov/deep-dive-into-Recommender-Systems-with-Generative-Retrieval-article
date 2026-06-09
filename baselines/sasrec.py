@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData
+from baselines.data import SequenceData, make_sequence_data
 from baselines.metrics import format_metrics
 from baselines.sequential import (
     build_training_pairs,
@@ -114,7 +114,7 @@ class SASRec(nn.Module):
 
 
 def train_sasrec(
-    data: AmazonSequenceData,
+    data: SequenceData,
     dim: int = DEFAULT_DIM,
     num_layers: int = DEFAULT_LAYERS,
     num_heads: int = DEFAULT_HEADS,
@@ -178,9 +178,13 @@ def run(
     ks: List[int],
     device: str = "cpu",
     seed: int = 42,
+    dataset: str = "amazon",
 ) -> None:
-    data = AmazonSequenceData(split=split)
-    print(f"[SASRec] split={split} users={len(data)} items={data.num_items} seed={seed}")
+    data = make_sequence_data(dataset, split)
+    print(
+        f"[SASRec] dataset={dataset} split={split} "
+        f"users={len(data)} items={data.num_items} seed={seed}"
+    )
     model = train_sasrec(data, dim=dim, epochs=epochs, max_len=max_len,
                          ks=ks, device=device, seed=seed)
     model.eval()
@@ -191,7 +195,8 @@ def run(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SASRec baseline on Amazon Reviews.")
+    parser = argparse.ArgumentParser(description="SASRec baseline (Amazon / ML-1M).")
+    parser.add_argument("--dataset", type=str, default="amazon")
     parser.add_argument("--split", type=str, default="beauty")
     parser.add_argument("--dim", type=int, default=DEFAULT_DIM)
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
@@ -208,6 +213,7 @@ def main() -> None:
         ks=args.ks,
         device=args.device,
         seed=args.seed,
+        dataset=args.dataset,
     )
 
 

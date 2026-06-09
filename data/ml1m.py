@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import torch
 
@@ -56,6 +57,13 @@ class RawMovieLens1M(MovieLens1M, PreprocessingMixin):
         x = torch.cat([titles_emb, genres], axis=1)
 
         data["item"].x = x
+        # ``ItemData`` / RQ-VAE expect a human-readable text field and a
+        # content-train mask (held-out items index but never train the RQ-VAE),
+        # mirroring ``AmazonReviews.process``.
+        data["item"].text = np.array(titles_text)
+        gen = torch.Generator()
+        gen.manual_seed(42)
+        data["item"].is_train = torch.rand(x.shape[0], generator=gen) > 0.05
         # Process user data:
         full_df = pd.read_csv(
             self.raw_paths[1],

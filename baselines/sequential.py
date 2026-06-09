@@ -12,7 +12,7 @@ from typing import List, Tuple
 import torch
 from torch import Tensor
 
-from baselines.data import AmazonSequenceData, build_seen_mask
+from baselines.data import SequenceData, build_seen_mask
 from baselines.metrics import RankingMetrics, format_metrics
 
 
@@ -65,7 +65,7 @@ def build_training_pairs(
 
 @torch.no_grad()
 def evaluate_next_item(
-    data: AmazonSequenceData,
+    data: SequenceData,
     score_fn,
     split: str,
     max_len: int,

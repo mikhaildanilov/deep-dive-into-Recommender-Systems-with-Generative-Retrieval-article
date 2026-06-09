@@ -18,7 +18,7 @@ from typing import Callable, List
 
 import gin
 
-from baselines.data import AmazonSequenceData
+from baselines.data import make_sequence_data
 from baselines.metrics import format_metrics
 
 from baselines.ease import run as ease_run
@@ -76,6 +76,7 @@ def _eval_and_report(name: str, eval_fn: Callable[[str], dict]) -> None:
 @gin.configurable
 def run_baseline(
     model: str = None,
+    dataset: str = "amazon",
     split: str = "beauty",
     ks: List[int] = [5, 10, 50, 100],
     seed: int = 42,
@@ -119,15 +120,15 @@ def run_baseline(
         raise ValueError(f"Unknown model {model!r}; valid options: {VALID_MODELS}.")
 
     ks = list(ks)
-    data = AmazonSequenceData(split=split)
+    data = make_sequence_data(dataset, split)
     print(
-        f"[run_baseline] model={model} split={split} "
+        f"[run_baseline] model={model} dataset={dataset} split={split} "
         f"users={len(data)} items={data.num_items} ks={ks}"
     )
 
     if model == "ease":
         # EASE is closed-form: its own runner handles train + val/test + print.
-        ease_run(split=split, reg=ease_reg, ks=ks, tune=ease_tune)
+        ease_run(split=split, reg=ease_reg, ks=ks, tune=ease_tune, dataset=dataset)
         return
 
     epochs = _default(epochs, DEFAULT_EPOCHS[model])
@@ -194,7 +195,7 @@ def run_baseline(
     else:  # tiger_random / tiger_lsh
         id_method = "random" if model == "tiger_random" else "lsh"
         embeddings = (
-            load_item_embeddings(split, data.num_items)
+            load_item_embeddings(data, split, dataset=dataset)
             if id_method == "lsh"
             else None
         )
