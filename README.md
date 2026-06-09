@@ -82,6 +82,19 @@
 
 ---
 
+### 6. Все ноутбуки для MovieLens-1M
+
+**`1-data-fast-baselines-movielens.ipynb`** 
+**`2-tiger-rqvae-movielens.ipynb`**
+**`3-tiger-random-movielens.ipynb`**
+**`4-tiger-lsh-movielens.ipynb`**
+**`5-ablations-movielens.ipynb`**
+
+- Акселератор: **GPU T4 x2**
+- Дополнительных зависимостей нет
+- Запускает все то же самое, что для Amazon Beauty, но для MovieLens
+- Везде используется temporal split
+
 ## Примечания
 
 - Ноутбуки 3–5 с temporal сплитом клонируют ветку `global_temp_split`, в которой лежит темпорально разбитый `sequential_data.txt` для Amazon Beauty.
